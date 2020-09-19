@@ -10,6 +10,7 @@
  * See the License for the specific language governing permissions and limitations under the License.
  */
 
+import { AuthState } from './AuthState';
 import { StorageUtil } from './Storage';
 import { CookieOptions } from './Cookies';
 import { HttpRequestClient } from './http';
@@ -56,7 +57,7 @@ export interface OktaAuthOptions extends CustomUrls {
   transformErrorXHR?: (xhr: object) => any;
   headers?: object;
   maxClockSkew?: number;
-  isAuthenticated?: (oktaAuth: OktaAuth) => Promise<boolean>;
+  isAuthenticated?: (oktaAuth: OktaAuth, authState: AuthState) => Promise<boolean>;
   onAuthRequired?: (oktaAuth: OktaAuth) => void;
   devMode?: boolean; 
 }

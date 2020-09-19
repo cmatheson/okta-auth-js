@@ -70,7 +70,7 @@ function renderApp() {
     document.getElementById('authState').innerText = formatJSON(authState);
     if (authState.isAuthenticated) {
       // User is authenticated. Update UI
-      document.getElementById('accessToken').innerText = formatJSON(authState.tokens.accessToken);
+      document.getElementById('accessToken').innerText = formatJSON(authState.accessToken);
       document.getElementById('userInfo').innerText = formatJSON(authState.userInfo);
       document.getElementById('auth').style.display = 'block';
       return;
@@ -100,27 +100,20 @@ function renderApp() {
 
 // Async function, gathers all information into a unique object for synchronous use. May become out-of-date.
 function getAuthState() {
-  var authState = {
-    isAuthenticated: false,
-    hasTokens: false,
-    userInfo: null,
-    tokens: null
-  };
-  return getTokens().then(function(tokens) {
-    authState.tokens = tokens;
-    authState.hasTokens = !!(tokens.idToken && tokens.accessToken);
-
-     if (config.requireUserSession) {
-       // checking `hasTokens` before calling getUserInfo API avoids unnecessary calls
-       if (authState.hasTokens) {
-        return getUserInfo().then(function(userInfo) {
-          authState.userInfo = userInfo;
-        });
-       }
+  return new Promise(resolve => {
+    var authStateManager = authClient.authStateManager;
+    var authState = authStateManager.getAuthState();
+    if (authState.isPending) {
+      authStateManager.subscribe(function(authState) {
+        if (authState.isPending) {
+          return;
+        }
+        authStateManager.unsubscribe(this);
+        resolve(authState);
+      });
+      return;
     }
-  }).then(function() {
-    authState.isAuthenticated = config.requireUserSession ? !!authState.userInfo : authState.hasTokens;
-    return authState;
+    resolve(authState);
   });
 }
 
@@ -275,6 +268,20 @@ function logout(e) {
   authClient.signOut();
 }
 
+function hasOktaSSO(_authClient, authState) {
+  return new Promise(resolve => {
+    if (!authState.accessToken || !authState.idToken) {
+      return resolve(false);
+    }
+
+    authState.hasTokens = true;
+    return getUserInfo().then(userInfo => {
+      authState.userInfo = userInfo;
+      return resolve(!!userInfo);
+    });
+  });
+}
+
 function createAuthClient() {
   // The `OktaAuth` constructor can throw if the config is malformed
   try {
@@ -284,8 +291,10 @@ function createAuthClient() {
       redirectUri: config.redirectUri,
       tokenManager: {
         storage: config.storage
-      }
+      },
+      isAuthenticated: config.requireUserSession ? hasOktaSSO : undefined
     });
+    authClient.authStateManager.updateAuthState();
   } catch (error) {
     return showError(error);
   }

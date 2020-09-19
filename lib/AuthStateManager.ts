@@ -130,22 +130,23 @@ class AuthStateManager {
             idToken = null;
             isPending = shouldEvaluateIsPending();
           }
+          const authState = {
+            ...this._authState,
+            accessToken,
+            idToken,
+            isPending 
+          };
           let promise = isAuthenticated 
-            ? isAuthenticated(this._sdk)
+            ? isAuthenticated(this._sdk, authState)
             : Promise.resolve(!!(accessToken && idToken));
 
           promise
             .then(isAuthenticated => emitAndResolve({ 
-              ...this._authState,
-              accessToken,
-              idToken,
-              isAuthenticated,
-              isPending 
+              ...authState,
+              isAuthenticated
             }))
             .catch(error => emitAndResolve({ 
-              ...this._authState, 
-              accessToken, 
-              idToken, 
+              ...authState, 
               isAuthenticated: false, 
               isPending: false,
               error
