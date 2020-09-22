@@ -265,7 +265,7 @@ function shouldThrottleRenew(renewTimeQueue) {
     shoudlThrottleRenew = lastTime - firstTime < 30 * 1000;
   }
   return shoudlThrottleRenew;
-};
+}
 
 export class TokenManager {
   get: (key: string) => Promise<Token>;
