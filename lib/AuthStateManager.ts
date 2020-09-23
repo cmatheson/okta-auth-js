@@ -1,7 +1,6 @@
 import { AuthSdkError } from './errors';
 import { AuthState, UpdateAuthStateOptions } from './types';
 import { OktaAuth } from './browser';
-import { isIE11OrLess } from './util';
 import { EVENT_ADDED, EVENT_REMOVED } from './TokenManager';
 const PCancelable = require('p-cancelable');
 
@@ -53,21 +52,6 @@ class AuthStateManager {
     sdk.tokenManager.on(EVENT_REMOVED, (key, token) => {
       this.updateAuthState({ event: EVENT_REMOVED, key, token });
     });
-
-    // Sync authState cross multiple tabs
-    window.onstorage = ({key, newValue, oldValue}: StorageEvent) => {
-      const { storageKey } = this._sdk.tokenManager._getOptions();
-      if (key !== storageKey) {
-        return;
-      }
-      // LocalStorage cross tabs update is not synced in IE, set a 1s timer to read latest value
-      // https://stackoverflow.com/questions/24077117/localstorage-in-win8-1-ie11-does-not-synchronize
-      if (isIE11OrLess() && newValue !== oldValue) {
-        setTimeout(() => this.updateAuthState({ event: EVENT_UPDATED_CROSS_TABS }), 1000);
-      } else {
-        this.updateAuthState({ event: EVENT_UPDATED_CROSS_TABS });
-      }
-    };
   }
 
   getAuthState(): AuthState {
@@ -97,8 +81,7 @@ class AuthStateManager {
     };
 
     // do not re-evaluate "isPending" for "updated" event (cross tab sync) in IE
-    const shouldEvaluateIsPending = () => 
-      (autoRenew || autoRemove) && (event !== EVENT_UPDATED_CROSS_TABS && !isIE11OrLess());
+    const shouldEvaluateIsPending = () => (autoRenew || autoRemove);
 
     if (this._pending.updateAuthStatePromise) {
       if (this._pending.canceledTimes >= MAX_PROMISE_CANCEL_TIMES) {
