@@ -1,6 +1,21 @@
+/* global window, StorageEvent */
+
 import Emitter from 'tiny-emitter';
+import { OktaAuth, AuthSdkError } from '@okta/okta-auth-js';
 import AuthStateManager, { DEFAULT_AUTH_STATE } from '../../lib/AuthStateManager';
-import { AuthSdkError } from '../../lib/errors';
+
+function createAuth() {
+  return new OktaAuth({
+    pkce: false,
+    issuer: 'https://auth-js-test.okta.com',
+    clientId: 'NPSfOkH5eZrTy8PMDlvx',
+    redirectUri: 'https://example.com/redirect',
+    tokenManager: {
+      autoRenew: false,
+      autoRemove: false,
+    }
+  });
+}
 
 describe('AuthStateManager', () => {
   let sdkMock;
@@ -31,15 +46,17 @@ describe('AuthStateManager', () => {
     it('should call updateAuthState when "added" event emitted', () => {
       const instance = new AuthStateManager(sdkMock);
       instance.updateAuthState = jest.fn();
-      sdkMock.emitter.emit('added', 'fakeKey', 'fakeToken');
-      expect(instance.updateAuthState).toHaveBeenCalledWith({ event: 'added', key: 'fakeKey', token: 'fakeToken' });
+      const fakeTimestamp = 111;
+      sdkMock.emitter.emit('added', 'fakeKey', 'fakeToken', { timestamp: fakeTimestamp });
+      expect(instance.updateAuthState).toHaveBeenCalledWith({ event: 'added', key: 'fakeKey', token: 'fakeToken', timestamp: fakeTimestamp });
     });
 
     it('should call updateAuthState when "removed" event emitted', () => {
       const instance = new AuthStateManager(sdkMock);
       instance.updateAuthState = jest.fn();
-      sdkMock.emitter.emit('removed', 'fakeKey', 'fakeToken');
-      expect(instance.updateAuthState).toHaveBeenCalledWith({ event: 'removed', key: 'fakeKey', token: 'fakeToken' });
+      const fakeTimestamp = 111;
+      sdkMock.emitter.emit('removed', 'fakeKey', 'fakeToken', { timestamp: fakeTimestamp });
+      expect(instance.updateAuthState).toHaveBeenCalledWith({ event: 'removed', key: 'fakeKey', token: 'fakeToken', timestamp: fakeTimestamp });
     });
 
     it('should not call updateAuthState if events is not any of "added", "renewed" or "removed"', () => {
@@ -331,6 +348,44 @@ describe('AuthStateManager', () => {
           resolve();
         }, 100);
       });
+    });
+
+    it('should not trigger updateAuthState process if the comming event is earlier than last processed event', () => {
+      expect.assertions(2);
+      return new Promise(resolve => {
+        const latestTimestamp = Date.now();
+        const timestampFromPast = latestTimestamp - 1000;
+        const instance = new AuthStateManager(sdkMock);
+        instance.updateAuthState({ timestamp: latestTimestamp });
+        setTimeout(() => {
+          instance.updateAuthState({ timestamp: timestampFromPast });
+        }, 50);
+        const handler = jest.fn();
+        instance.subscribe(handler);
+
+        setTimeout(() => {
+          expect(handler).toHaveBeenCalledTimes(1);
+          expect(handler).toHaveBeenCalledWith({
+            isPending: false,
+            isAuthenticated: true,
+            idToken: 'fakeIdToken0',
+            accessToken: 'fakeAccessToken0'
+          });
+          resolve();
+        }, 100);
+      });
+    });
+
+    it('should call authStateManager.updateAuthState once when localStorage changed from other dom', () => {
+      const auth = createAuth();
+      auth.authStateManager.updateAuthState = jest.fn();
+      // simulate localStorage change from other dom context
+      window.dispatchEvent(new StorageEvent('storage', {
+        key: 'okta-token-storage', 
+        newValue: '{"idToken": "fake_id_token"}',
+        oldValue: '{}'
+      }));
+      expect(auth.authStateManager.updateAuthState).toHaveBeenCalledTimes(1);
     });
   });
 

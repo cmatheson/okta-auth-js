@@ -33,6 +33,7 @@ class AuthStateManager {
     canceledTimes: number; 
   };
   _authState: AuthState;
+  _lastEventTimestamp: number;
 
   constructor(sdk: OktaAuth) {
     if (!sdk.emitter) {
@@ -42,14 +43,15 @@ class AuthStateManager {
     this._sdk = sdk;
     this._pending = { ...DEFAULT_PENDING };
     this._authState = { ...DEFAULT_AUTH_STATE };
+    this._lastEventTimestamp = 0;
 
     // Listen on tokenManager events to start updateState process
     // "added" event is emitted in both add and renew process, just listen on "added" event to update auth state
-    sdk.tokenManager.on(EVENT_ADDED, (key, token) => {
-      this.updateAuthState({ event: EVENT_ADDED, key, token });
+    sdk.tokenManager.on(EVENT_ADDED, (key, token, { timestamp }) => {
+      this.updateAuthState({ event: EVENT_ADDED, key, token, timestamp });
     });
-    sdk.tokenManager.on(EVENT_REMOVED, (key, token) => {
-      this.updateAuthState({ event: EVENT_REMOVED, key, token });
+    sdk.tokenManager.on(EVENT_REMOVED, (key, token, { timestamp }) => {
+      this.updateAuthState({ event: EVENT_REMOVED, key, token, timestamp });
     });
   }
 
@@ -57,7 +59,7 @@ class AuthStateManager {
     return this._authState;
   }
 
-  updateAuthState({ event, key, token }: UpdateAuthStateOptions = {}): void {
+  updateAuthState({ event, key, token, timestamp }: UpdateAuthStateOptions = { timestamp: Date.now() }): void {
     const { isAuthenticated, devMode } = this._sdk.options;
     const { autoRenew, autoRemove } = this._sdk.tokenManager._getOptions();
 
@@ -80,6 +82,15 @@ class AuthStateManager {
     };
 
     const shouldEvaluateIsPending = () => (autoRenew || autoRemove);
+
+    if (this._lastEventTimestamp > timestamp) {
+      // cancel evaludation if event is from the past 
+      devMode && logger('canceled');
+      return;
+    } else {
+      // track event timestamp
+      this._lastEventTimestamp = timestamp;
+    }
 
     if (this._pending.updateAuthStatePromise) {
       if (this._pending.canceledTimes >= MAX_PROMISE_CANCEL_TIMES) {

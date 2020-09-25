@@ -12,4 +12,5 @@ export interface UpdateAuthStateOptions {
   event?: string;
   key?: string;
   token?: Token;
+  timestamp: number;
 }
